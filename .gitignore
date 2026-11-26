@@ -1,0 +1,15 @@
+node_modules/
+.generated/
+dist/
+
+# Local implementation, review, and remediation records
+/docs/acceptance-report.md
+/docs/implementation-handoff.md
+/docs/implementation-progress.md
+/docs/independent-review.md
+/docs/neon-e2e-report.md
+/docs/remediation-plan.md
+/docs/remediation-progress.md
+/docs/remediation-report.md
+/docs/remediation-round-2.md
+/docs/reverification-report.md

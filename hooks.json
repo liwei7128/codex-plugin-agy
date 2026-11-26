@@ -1,0 +1,19 @@
+{
+  "codex-review-gate": {
+    "enabled": false,
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "node ./scripts/hooks.mjs SessionStart",
+        "timeout": 5
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node ./scripts/hooks.mjs Stop",
+        "timeout": 310
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "codex": {
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/scripts/mcp-server.mjs"
+      ],
+      "env": {
+        "CODEX_PLUGIN_AGY_DATA_DIR": "${PLUGIN_DATA}"
+      },
+      "timeoutSeconds": 600,
+      "tools": {
+        "codex_delegate": {
+          "eager": true
+        },
+        "codex_status": {
+          "eager": true
+        },
+        "codex_result": {
+          "eager": true
+        }
+      }
+    }
+  }
+}

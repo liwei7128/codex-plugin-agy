@@ -1,0 +1,24 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "codex-plugin-agy",
+  "displayName": "Codex Worker",
+  "description": "Delegate bounded engineering tasks and read-only reviews to local OpenAI Codex. Unofficial community port.",
+  "version": "0.1.1",
+  "logo": "assets/logo.svg",
+  "author": {
+    "name": "codex-plugin-agy Contributors"
+  },
+  "repository": "https://github.com/liwei7128/codex-plugin-agy",
+  "license": "Apache-2.0",
+  "suggestedPrompts": [
+    "Check local Codex readiness with /codex-setup",
+    "Delegate a bounded engineering task to Codex",
+    "Review the uncommitted changes with Codex"
+  ],
+  "keywords": [
+    "codex",
+    "worker",
+    "code-review",
+    "mcp"
+  ]
+}

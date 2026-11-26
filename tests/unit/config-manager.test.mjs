@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { ConfigManager, dataRoot } from "../../dist/lib/config/index.js";
+
+test("resolve data directory and all five configuration layers", t => {
+  const temp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "codex-agy-config-")));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const root = path.join(temp, "data");
+  assert.equal(dataRoot({ PLUGIN_DATA: root }), root);
+  assert.equal(dataRoot({ PLUGIN_DATA: temp, CODEX_PLUGIN_AGY_DATA_DIR: root }), root);
+  const config = new ConfigManager(root);
+  const workspace = path.join(temp, "work");
+  fs.mkdirSync(workspace);
+  assert.equal(config.resolve(workspace).model, "gpt-6.2-sol");
+  const codex = { model: "codex-model" };
+  assert.equal(config.resolve(workspace, {}, codex).model, "codex-model");
+  config.update({ model: "global-model", reviewGate: { enabled: true } });
+  assert.equal(config.resolve(workspace, {}, codex).model, "global-model");
+  config.update({ model: "workspace-model", sandbox: "workspace-write", reviewGate: { maxRunsPerTurn: 3 } }, workspace);
+  assert.equal(config.resolve(workspace, {}, codex).model, "workspace-model");
+  assert.equal(config.resolve(workspace, { model: "call-model" }, codex).model, "call-model");
+  assert.equal(config.resolve(workspace).sandbox, "read-only");
+  assert.deepEqual(config.resolve(workspace).reviewGate, { enabled: true, maxRunsPerTurn: 3, timeoutSeconds: 120 });
+  assert.deepEqual(fs.readdirSync(config.workspaceDirectory(workspace)), ["config.json"]);
+  assert.throws(() => config.update({ sandbox: "danger-full-access" }, workspace), { code: "POLICY_VIOLATION" });
+  assert.throws(() => config.update({ maxConcurrency: 9 }, workspace), { code: "INVALID_ARGUMENTS" });
+  const inherited = config.resolve(workspace, { model: undefined, reviewGate: { enabled: undefined } });
+  assert.equal(inherited.model, "workspace-model");
+  assert.equal(inherited.reviewGate.enabled, true);
+  config.update({ model: undefined, reviewGate: { maxRunsPerTurn: undefined, timeoutSeconds: 60 } }, workspace);
+  assert.deepEqual(config.resolve(workspace).reviewGate, { enabled: true, maxRunsPerTurn: 3, timeoutSeconds: 60 });
+  assert.equal(config.resolve(workspace).model, "workspace-model");
+});
