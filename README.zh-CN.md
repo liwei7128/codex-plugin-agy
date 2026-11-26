@@ -17,7 +17,7 @@ flowchart LR
 
 ## 版本与安装
 
-主验证环境为 Antigravity CLI **1.5.17** 和 Codex CLI **0.172.0**。建议使用 Node.js **20 或更高版本**，运行时最低为 18.18。审查和 worktree 还需要 Git。实际验证的平台与版本见项目验证报告。
+请使用 Antigravity CLI **1.5.17** 或已验证的 **1.5.18**，以及官方 Codex CLI **0.172.0 或更高版本**。建议使用 Node.js **20 或更高版本**，运行时最低为 18.18。审查和 worktree 还需要 Git。实际验证的平台与版本见项目验证报告。
 
 从源码构建并安装：
 
@@ -77,6 +77,8 @@ agy plugin list --json
 | `codex_transfer` | 将显式提供的结构化上下文交接给持久线程。 |
 
 例如通过 `/codex-delegate` 描述目标、范围和验收标准，通过 `/codex-review` 请求审查暂存变更，或使用 `/codex-result` 传入任务 ID。在 `/skills` 中可找到插件命名空间下的技能。
+
+指定 Git 审查范围时，请为 `base` 提供分支名，为 `commit` 提供明确的提交 SHA。插件拒绝 `HEAD~1` 和 `HEAD^` 等相对修订写法。
 
 ### 后台任务、续接和并行写入
 

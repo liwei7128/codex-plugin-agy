@@ -9,8 +9,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
-  brokerHealth, captureProcessIdentity, connectAppServer, connectBrokerSocket, connectDirect, readBrokerRecord,
-  shutdownIdleBroker, terminateVerifiedProcessTree, verifyProcessIdentity,
+  brokerHealth, captureProcessIdentity, connectAppServer, connectBrokerSocket, connectDirect, probeProcessIdentityAsync,
+  readBrokerRecord, shutdownIdleBroker, terminateVerifiedProcessTree, verifyProcessIdentity,
 } from "../../dist/lib/app-server/index.js";
 import { brokerDirectory, endpointPath, makeBrokerEndpoint } from "../../dist/lib/app-server/broker-endpoint.js";
 
@@ -31,6 +31,11 @@ async function until(predicate) {
     await delay(50);
   } while (Date.now() < deadline);
   assert.fail("Expected broker condition did not occur");
+}
+
+async function waitForBrokerExit(options, cwd, identity) {
+  await until(async () => readBrokerRecord(options.dataRoot, cwd) === null &&
+    await probeProcessIdentityAsync(identity) === "dead");
 }
 
 test("direct initializes and routes correlated RPCs", async t => {
@@ -59,9 +64,10 @@ test("broker authenticates before forwarding, falls back when busy, and expires"
     else process.env.CODEX_BIN = original;
   });
   const first = await connectAppServer(cwd, broker);
+  const record = readBrokerRecord(dataRoot, cwd);
   try {
     assert.equal(first.transport, "broker");
-    const record = readBrokerRecord(dataRoot, cwd);
+    assert.ok(record);
     assert.equal((await brokerHealth(broker, cwd)).busy, true);
     if (process.platform !== "win32") assert.equal(fs.statSync(endpointPath(record.endpoint)).mode & 0o777, 0o600);
     const bypass = net.connect(endpointPath(record.endpoint));
@@ -76,12 +82,14 @@ test("broker authenticates before forwarding, falls back when busy, and expires"
   } finally {
     await first.close();
   }
-  await until(() => !readBrokerRecord(dataRoot, cwd));
+  await waitForBrokerExit(broker, cwd, record.identity);
   const recovered = await connectAppServer(cwd, broker);
-  assert.equal(recovered.transport, "broker");
+  const replacement = readBrokerRecord(dataRoot, cwd);
   await recovered.close();
+  assert.equal(recovered.transport, "broker");
+  assert.ok(replacement);
   await until(() => shutdownIdleBroker(broker, cwd));
-  await until(() => !readBrokerRecord(dataRoot, cwd));
+  await waitForBrokerExit(broker, cwd, replacement.identity);
 });
 
 test("reject malformed and oversized App Server lines", async t => {
@@ -123,14 +131,16 @@ test("a newly dead broker is replaced immediately and its Unix socket is pruned"
   fs.writeFileSync(path.join(directory, "broker.json"), JSON.stringify({ endpoint, authToken: "b".repeat(64), identity: stale, cwd }));
   if (process.platform !== "win32") assert.ok(fs.lstatSync(endpointPath(endpoint)).isSocket());
   const client = await connectAppServer(cwd, options);
+  const replacement = readBrokerRecord(cwd, cwd);
   try {
     assert.equal(client.transport, "broker");
-    assert.notEqual(readBrokerRecord(cwd, cwd).identity.markerToken, stale.markerToken);
+    assert.ok(replacement);
+    assert.notEqual(replacement.identity.markerToken, stale.markerToken);
     if (process.platform !== "win32") assert.equal(fs.existsSync(endpointPath(endpoint)), false);
   } finally {
     await client.close();
     await until(() => shutdownIdleBroker(options, cwd));
-    await until(() => !readBrokerRecord(cwd, cwd));
+    if (replacement) await waitForBrokerExit(options, cwd, replacement.identity);
   }
 });
 

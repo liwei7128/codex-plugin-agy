@@ -4,6 +4,7 @@ dist/
 
 # Local implementation, review, and remediation records
 /docs/acceptance-report.md
+/docs/final-acceptance-report.md
 /docs/implementation-handoff.md
 /docs/implementation-progress.md
 /docs/independent-review.md
@@ -12,4 +13,5 @@ dist/
 /docs/remediation-progress.md
 /docs/remediation-report.md
 /docs/remediation-round-2.md
+/docs/remediation-round-2-report.md
 /docs/reverification-report.md

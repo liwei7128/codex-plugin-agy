@@ -10,7 +10,10 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ListRootsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { brokerHealth, probeProcessIdentityAsync, readBrokerRecord, shutdownIdleBroker } from "../../dist/lib/app-server/index.js";
+import {
+  brokerHealth, connectBrokerSocket, probeProcessIdentityAsync, readBrokerRecord, shutdownIdleBroker,
+} from "../../dist/lib/app-server/index.js";
+import { brokerDirectory, endpointPath } from "../../dist/lib/app-server/broker-endpoint.js";
 import { JobManager } from "../../dist/lib/jobs/index.js";
 import { ConfigManager } from "../../dist/lib/config/index.js";
 
@@ -111,6 +114,60 @@ test("MCP EOF shuts down the idle broker automatically", async () => {
   }
 });
 
+test("broker shutdown acknowledges record and endpoint cleanup before a fast reconnect", async () => {
+  const context = await fixture();
+  const options = { dataRoot: context.data, script: broker };
+  try {
+    const initial = await context.call("codex_delegate", { task: "fixture before idle shutdown" });
+    assert.equal(initial.pluginMeta.state, "completed");
+    const first = readBrokerRecord(context.data, context.cwd);
+    assert.ok(first);
+    await waitFor(async () => (await brokerHealth(options, context.cwd))?.busy === false);
+    assert.equal(await shutdownIdleBroker(options, context.cwd), true);
+    assert.ok(readBrokerRecord(context.data, context.cwd) === null, "shutdown acknowledged with its record still present");
+    if (process.platform !== "win32") assert.equal(fs.existsSync(endpointPath(first.endpoint)), false);
+
+    const job = await context.call("codex_delegate", { task: "fixture after idle shutdown" });
+    assert.equal(job.pluginMeta.state, "completed");
+    const replacement = readBrokerRecord(context.data, context.cwd);
+    assert.ok(replacement);
+    assert.notEqual(replacement.endpoint, first.endpoint);
+    await waitFor(async () => await probeProcessIdentityAsync(first.identity) === "dead");
+    assert.equal(readBrokerRecord(context.data, context.cwd)?.endpoint, replacement.endpoint);
+  } finally {
+    await context.close();
+  }
+});
+
+test("broker shutdown withholds acknowledgement while the record lock prevents cleanup", async () => {
+  const context = await fixture();
+  const options = { dataRoot: context.data, script: broker };
+  try {
+    const initial = await context.call("codex_delegate", { task: "fixture for contended shutdown" });
+    assert.equal(initial.pluginMeta.state, "completed");
+    const record = readBrokerRecord(context.data, context.cwd);
+    assert.ok(record);
+    await waitFor(async () => (await brokerHealth(options, context.cwd))?.busy === false);
+    const client = await connectBrokerSocket(record.endpoint, record.authToken);
+    const lock = path.join(brokerDirectory(context.data, context.cwd), ".broker.lock");
+    try {
+      fs.writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+      try {
+        await assert.rejects(client.rpc("broker/shutdown", { idleOnly: true }, 350), { code: "TIMEOUT" });
+        assert.equal(readBrokerRecord(context.data, context.cwd)?.endpoint, record.endpoint);
+      } finally {
+        fs.unlinkSync(lock);
+      }
+    } finally {
+      await client.close();
+    }
+    await waitFor(async () => readBrokerRecord(context.data, context.cwd) === null &&
+      await probeProcessIdentityAsync(record.identity) === "dead");
+  } finally {
+    await context.close();
+  }
+});
+
 test("MCP SIGTERM closes stdio and shuts down the idle broker", { skip: process.platform === "win32" }, async () => {
   const context = await fixture();
   const options = { dataRoot: context.data, script: broker };
@@ -123,7 +180,8 @@ test("MCP SIGTERM closes stdio and shuts down the idle broker", { skip: process.
     await waitFor(async () => (await brokerHealth(options, context.cwd))?.busy === false);
     process.kill(context.transport.pid, "SIGTERM");
     await closed;
-    assert.equal(readBrokerRecord(context.data, context.cwd), null);
+    await waitFor(async () => readBrokerRecord(context.data, context.cwd) === null &&
+      await probeProcessIdentityAsync(record.identity) === "dead");
   } finally {
     await context.close();
   }
@@ -141,6 +199,8 @@ test("MCP EOF leaves a leased broker and detached job active", async () => {
     await context.client.close();
     assert.equal(manager.store.get(id).state, "running");
     assert.equal((await brokerHealth(options, context.cwd)).busy, true);
+    assert.equal(await shutdownIdleBroker(options, context.cwd), false);
+    assert.equal(manager.store.get(id).state, "running");
   } finally {
     if (id && manager.store.get(id)?.state === "running") await manager.cancel(id);
     await context.close();

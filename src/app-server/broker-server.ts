@@ -6,7 +6,7 @@ import { SecretRedactor } from "../security/index.js";
 import { endpointPath } from "./broker-endpoint.js";
 import { clearBrokerRecord, waitForBrokerRecord } from "./broker-lifecycle.js";
 import { AppServerRpcError, BROKER_BUSY_RPC_CODE, connectDirect, JsonlReader, sendFrame, type AppServerClient } from "./client.js";
-import { asRecord, type RpcFrame } from "./protocol.js";
+import { asRecord, type RpcFrame, type RpcId } from "./protocol.js";
 
 const forwardedMethods = new Set([
   "account/read", "config/read", "model/list", "thread/start", "thread/resume", "thread/read",
@@ -39,7 +39,7 @@ async function main(file: string, marker: string, idleMs: number) {
 
   function armIdle() {
     clearTimeout(idle);
-    if (!lease && !stopping) idle = setTimeout(() => void shutdown(), idleMs);
+    if (!lease && !stopping) idle = setTimeout(stopOnIdleOrSignal, idleMs);
   }
 
   function provideAppServer() {
@@ -78,15 +78,27 @@ async function main(file: string, marker: string, idleMs: number) {
     }, () => {});
   }
 
-  async function shutdown() {
+  async function shutdown(request?: { socket: net.Socket; id: RpcId }) {
     if (stopping) return;
     stopping = true;
     clearTimeout(idle);
-    for (const socket of clients) socket.end();
     server.close();
-    await (closing ?? closeAppServer());
-    if (record.endpoint.startsWith("unix:")) fs.rmSync(endpoint, { force: true });
-    clearBrokerRecord(file, marker);
+    try {
+      if (record.endpoint.startsWith("unix:")) fs.rmSync(endpoint, { force: true });
+      clearBrokerRecord(file, marker);
+      // Retire discovery before acknowledging, without waiting for the child to exit.
+      if (request) write(request.socket, { id: request.id, result: {} });
+    } finally {
+      for (const socket of clients) socket.end();
+      await (closing ?? closeAppServer());
+    }
+  }
+
+  function stopOnIdleOrSignal() {
+    void shutdown().catch(error => {
+      process.stderr.write(redactor.text(error instanceof Error ? error.message : "Broker shutdown failed") + "\n");
+      process.exitCode = 1;
+    });
   }
 
   async function handle(socket: net.Socket, frame: RpcFrame) {
@@ -101,11 +113,10 @@ async function main(file: string, marker: string, idleMs: number) {
       return;
     }
     if (method === "broker/shutdown") {
-      if (lease || closing) {
+      if (lease || closing || stopping) {
         write(socket, { id, error: { code: BROKER_BUSY_RPC_CODE, message: "Broker is busy" } });
       } else {
-        write(socket, { id, result: {} });
-        void shutdown();
+        await shutdown({ socket, id });
       }
       return;
     }
@@ -214,8 +225,8 @@ async function main(file: string, marker: string, idleMs: number) {
   await listening;
   if (record.endpoint.startsWith("unix:")) fs.chmodSync(endpoint, 0o600);
   armIdle();
-  process.once("SIGINT", () => void shutdown());
-  process.once("SIGTERM", () => void shutdown());
+  process.once("SIGINT", stopOnIdleOrSignal);
+  process.once("SIGTERM", stopOnIdleOrSignal);
 }
 
 const [, , file, marker, idle] = process.argv;

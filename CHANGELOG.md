@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 (release candidate)
+
+- Reconcile dead workers and release their write leases at the recommended polling interval, even if the operating system recycles the PID.
+- Remove idle broker records and close their endpoints before acknowledging shutdown.
+- Persist the completed job phase and document Git revision restrictions in both languages.
+
 ## 0.1.1 (release candidate)
 
 - Preserve paginated result evidence, completed output when cancellation races completion, and write leases during inconclusive worker probes.

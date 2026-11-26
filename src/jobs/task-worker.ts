@@ -116,20 +116,20 @@ async function main(workspaceRoot: string, id: string, launchToken: string, brok
     if (state === "completed") store.update(id, ["starting"], { state: "running", turnId: output.turnId });
     const expected = authoritativeCompletion ? ["running", "cancelling"] as const : drivingStates;
     if (!store.update(id, expected, {
-      state, phase: "finalizing", completedAt: now(),
+      state, phase: state, completedAt: now(),
       output: state === "completed" ? output : null,
       effectiveModel: output.effectiveModel, turnId: output.turnId,
       pendingApproval: output.approvalEvents[0] ?? null, warnings, outOfScopeFiles,
       error: state === "awaiting_approval" ? errorInfo(new PluginError("APPROVAL_REQUIRED", "Interactive approval is required")) : null,
     })) {
-      store.update(id, ["cancelling"], { state: "cancelled", completedAt: now() });
+      store.update(id, ["cancelling"], { state: "cancelled", phase: "cancelled", completedAt: now() });
     }
   } catch (failure) {
     const error = redact.deep(errorInfo(failure));
     log(error.message);
-    if (!store.update(id, ["cancelling"], { state: "cancelled", completedAt: now() })) {
+    if (!store.update(id, ["cancelling"], { state: "cancelled", phase: "cancelled", completedAt: now() })) {
       const state = error.code === "TIMEOUT" ? "timed_out" : error.code === "APP_SERVER_DISCONNECTED" ? "interrupted" : "failed";
-      store.update(id, drivingStates, { state, error, completedAt: now() });
+      store.update(id, drivingStates, { state, phase: state, error, completedAt: now() });
     }
   } finally {
     clearInterval(timer);

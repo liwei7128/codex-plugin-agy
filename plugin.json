@@ -3,7 +3,7 @@
   "name": "codex-plugin-agy",
   "displayName": "Codex Worker",
   "description": "Delegate bounded engineering tasks and read-only reviews to local OpenAI Codex. Unofficial community port.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "logo": "assets/logo.svg",
   "author": {
     "name": "codex-plugin-agy Contributors"

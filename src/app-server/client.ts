@@ -87,7 +87,7 @@ export class AppServerRpcError extends Error {
   }
 }
 
-export const clientInfo = { name: "codex-plugin-agy", title: "Codex Plugin for Antigravity", version: "0.1.1" };
+export const clientInfo = { name: "codex-plugin-agy", title: "Codex Plugin for Antigravity", version: "0.1.2" };
 export const initializeParams = {
   clientInfo,
   capabilities: {

@@ -157,7 +157,7 @@ export class JobManager {
         if (probe === "alive" && !didTerminate && job.identity && processPresence(job.identity) !== "dead") return latest;
         const state = didTerminate ? "cancelled" : "interrupted";
         const updated = this.store.update(id, ["cancelling"], {
-          state, completedAt: new Date().toISOString(),
+          state, phase: state, completedAt: new Date().toISOString(),
           error: didTerminate ? null : errorInfo(new PluginError("APP_SERVER_DISCONNECTED", "The worker exited during the cancellation grace period")),
         });
         if (updated) this.locks.release(id);
@@ -174,12 +174,14 @@ export class JobManager {
     }
     if (Date.now() - Date.parse(job.createdAt) < 1500 && !job.startedAt) return job;
     if (this.probe(job) !== "dead") return job;
-    this.probes.delete(job.id);
     const updated = this.store.update(job.id, [job.state], {
-      state: "interrupted", completedAt: new Date().toISOString(),
+      state: "interrupted", phase: "interrupted", completedAt: new Date().toISOString(),
       error: errorInfo(new PluginError("APP_SERVER_DISCONNECTED", "The worker process exited or its identity no longer matches")),
     });
-    if (updated) this.locks.release(job.id);
+    if (updated) {
+      this.probes.delete(job.id);
+      this.locks.release(job.id);
+    }
     return updated ?? this.store.get(job.id) ?? job;
   }
 
@@ -198,10 +200,12 @@ export class JobManager {
   private probe(job: JobRecord): ProcessProbe {
     const identity = job.identity;
     if (!identity) return "dead";
-    const presence = processPresence(identity);
-    if (presence !== "alive") return presence;
     const key = JSON.stringify([identity.pid, identity.markerToken, identity.startedAtMs, identity.executable]);
     const cached = this.probes.get(job.id);
+    // A recycled PID cannot make this exact worker identity live again.
+    if (cached?.identity === key && cached.result === "dead") return "dead";
+    const presence = processPresence(identity);
+    if (presence !== "alive") return presence;
     if (cached?.identity === key && Date.now() - cached.checkedAt < 1500) return cached.result;
     const pending = { checkedAt: Infinity, identity: key, result: "unknown" as ProcessProbe };
     this.probes.set(job.id, pending);

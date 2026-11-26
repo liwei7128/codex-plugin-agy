@@ -17,7 +17,7 @@ Both ports use the official App Server for Codex login, task execution, resume, 
 
 ## Requirements and installation
 
-Use Antigravity CLI **1.5.17**, official Codex CLI **0.172.0** or later, Node.js **20 or later recommended** (runtime floor 18.18), and Git for reviews and worktrees. The verification report records the versions and platforms exercised.
+Use Antigravity CLI **1.5.17** or the verified **1.5.18**, official Codex CLI **0.172.0** or later, Node.js **20 or later recommended** (runtime floor 18.18), and Git for reviews and worktrees. The verification report records the versions and platforms exercised.
 
 From the source repository:
 
